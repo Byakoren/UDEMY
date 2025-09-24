@@ -17,7 +17,7 @@ int main(){
     printf(" Mon int = %d et prend la taille de %d octets \n", mon_int, sizeof(int));
     printf(" Mon short = %d et prend la taille de %d octets \n", mon_short, sizeof(short));
     printf(" Mon long = %ld et prend la taille de %ld octets \n", mon_long, sizeof(long));
-    printf(" Mon float = %f et prend la taille de %d octets \n", mon_float, sizeof(float));
+    printf(" Mon float = %.2f et prend la taille de %d octets \n", mon_float, sizeof(float));
     printf(" Mon double = %f et prend la taille de %d octets \n", mon_double, sizeof(double));
     printf(" Mon char = %c et prend la taille de %d octets \n", mon_char, sizeof(char));
     
