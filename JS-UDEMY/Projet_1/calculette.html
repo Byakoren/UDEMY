@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Calculatrice Ultra Pro — Supplément</title>
+<style>
+  :root { --bg:#0f1115; --card:#171a21; --muted:#8b93a7; --text:#e9eeff; --accent:#6ea8fe; }
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font:15px/1.35 system-ui,Segoe UI,Roboto,Inter,sans-serif;display:grid;place-items:center;min-height:100svh}
+  .wrap{width:min(880px,95vw);display:grid;gap:14px;grid-template-columns:1.2fr .8fr}
+  .calc,.side{background:var(--card);border:1px solid #242a36;border-radius:14px;padding:14px}
+  .display{background:#0c0e13;border:1px solid #242a36;border-radius:10px;padding:10px 12px;text-align:right;min-height:64px;display:flex;flex-direction:column;justify-content:center;gap:4px}
+  .small{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .big{font-size:28px;font-weight:600;word-break:break-all}
+  .row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:10px}
+  button{border:1px solid #2a3140;background:#11151c;color:var(--text);padding:12px 10px;border-radius:10px;font-size:16px;cursor:pointer}
+  button:hover{border-color:#3a4458}
+  button.op{background:#121a28}
+  button.accent{background:linear-gradient(180deg,#335aa2,#29477f);border-color:#3e5ea9}
+  button.wide{grid-column:span 2}
+  .toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
+  .toolbar label{color:var(--muted);font-size:13px}
+  .hwrap{max-height:320px;overflow:auto;border:1px dashed #2a3140;border-radius:10px;padding:10px}
+  .hitem{display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid #202635}
+  .hitem:last-child{border-bottom:none}
+  .hitem .expr{color:var(--muted)}
+  .mem{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .badge{display:inline-flex;align-items:center;gap:6px;background:#0c121d;border:1px solid #293247;color:var(--muted);padding:6px 8px;border-radius:8px;font-size:12px}
+  .side h3{margin:6px 0 8px 0;font-size:14px;color:#b7c3e6}
+  .hint{color:var(--muted);font-size:12px;margin-top:8px}
+  @media (max-width:820px){.wrap{grid-template-columns:1fr} .side{order:-1}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="calc">
+    <div class="display" aria-live="polite">
+      <div class="small" id="expression">‎</div>
+      <div class="big" id="value">0</div>
+    </div>
+
+    <div class="toolbar">
+      <button id="clearAll" title="Reset (Esc)">AC</button>
+      <button id="clearEntry" title="Effacer la saisie">CE</button>
+      <button id="backspace" title="Retour (Backspace)">⌫</button>
+      <label>Décimales :
+        <select id="precision">
+          <option>auto</option>
+          <option>2</option><option>4</option><option selected>8</option><option>12</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="row">
+      <button class="op" data-fn="percent">%</button>
+      <button class="op" data-fn="sqrt">√</button>
+      <button class="op" data-fn="pow">xʸ</button>
+      <button class="op" data-op="÷">÷</button>
+
+      <button data-num="7">7</button>
+      <button data-num="8">8</button>
+      <button data-num="9">9</button>
+      <button class="op" data-op="×">×</button>
+
+      <button data-num="4">4</button>
+      <button data-num="5">5</button>
+      <button data-num="6">6</button>
+      <button class="op" data-op="−">−</button>
+
+      <button data-num="1">1</button>
+      <button data-num="2">2</button>
+      <button data-num="3">3</button>
+      <button class="op" data-op="+">+</button>
+
+      <button data-fn="negate">±</button>
+      <button data-num="0">0</button>
+      <button data-dot=",">,</button>
+      <button class="accent" id="equals">=</button>
+    </div>
+
+    <div class="mem">
+      <span class="badge">Mémoire: <strong id="memVal">0</strong></span>
+      <button id="mc">MC</button>
+      <button id="mr">MR</button>
+      <button id="mplus">M+</button>
+      <button id="mminus">M−</button>
+    </div>
+
+    <div class="hint">
+      Astuces clavier : chiffres, + - * / , . ; Entrée = égal ; Backspace = effacer ; Esc = AC.
+    </div>
+  </div>
+
+  <aside class="side">
+    <h3>Historique</h3>
+    <div class="hwrap" id="history" aria-live="polite"></div>
+    <button id="clearHistory" style="margin-top:10px">Vider l’historique</button>
+
+    <h3 style="margin-top:14px">Sécurité & précision</h3>
+    <div class="hint">
+      • Division par 0 bloquée • Racine négative bloquée • Arrondi intelligent anti-bouillie flottante • Copiez un résultat en cliquant dessus.
+    </div>
+  </aside>
+</div>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const $$ = (s) => Array.from(document.querySelectorAll(s));
+  const view = { expr: $("#expression"), val: $("#value"), hist: $("#history"), mem: $("#memVal") };
+  const state = {
+    a: null, b: null, op: null, entering: "a", overwrite: true, memory: 0,
+    precision: 8, stickyPrecision: false
+  };
+
+  const ops = {
+    "+": (a,b)=>a+b,
+    "−": (a,b)=>a-b,
+    "×": (a,b)=>a*b,
+    "÷": (a,b)=>{ if (b===0) throw new Error("Division par zéro."); return a/b; }
+  };
+
+  function parseDisplay(s){ return Number(String(s).replace(',', '.')); }
+  function format(n){
+    const pSel = $("#precision").value;
+    if (pSel !== "auto") state.precision = Number(pSel), state.stickyPrecision = true;
+    const p = state.stickyPrecision ? state.precision : 12;
+    // éviter 0.30000000000004 & co
+    const rounded = Number.isFinite(n) ? Number(Math.round(n * 1e12) / 1e12) : n;
+    let str = Number(rounded).toPrecision(p);
+    str = str.replace(/(\.0+|(?<=\.\d*?)0+)$/g, ""); // trim zeros
+    if (str.endsWith(".")) str = str.slice(0,-1);
+    str = str.replace(".", ","); // FR
+    return str;
+  }
+
+  function setDisplay(text, expr=""){
+    view.val.textContent = text;
+    view.expr.textContent = expr;
+  }
+
+  function appendDigit(d){
+    const cur = view.val.textContent;
+    if (state.overwrite || cur==="0") {
+      setDisplay(d.replace('.', ','), state.exprStr || "");
+      state.overwrite = false;
+    } else {
+      setDisplay(cur + d.replace('.', ','), state.exprStr || "");
+    }
+  }
+
+  function addDot(){
+    const cur = view.val.textContent;
+    if (!cur.includes(","))
+      setDisplay(cur + ",", state.exprStr || "");
+  }
+
+  function setOp(symbol){
+    const val = parseDisplay(view.val.textContent);
+    if (state.op && !state.overwrite) {
+      // chain operation
+      compute();
+    } else {
+      state.a = val;
+    }
+    state.op = symbol;
+    state.entering = "b";
+    state.overwrite = true;
+    state.exprStr = `${format(state.a)} ${symbol}`;
+    view.expr.textContent = state.exprStr;
+  }
+
+  function percent(){
+    if (!state.op) return;
+    const base = state.a ?? 0;
+    const val = parseDisplay(view.val.textContent);
+    const p = base * (val/100);
+    setDisplay(format(p), `${format(base)} ${state.op} ${format(val)}%`);
+    state.overwrite = true;
+  }
+
+  function sqrt(){
+    const v = parseDisplay(view.val.textContent);
+    if (v < 0) { err("Racine de négatif."); return; }
+    const r = Math.sqrt(v);
+    pushHistory(`√${format(v)}`, format(r));
+    setDisplay(format(r), `√${format(v)}`);
+    state.overwrite = true;
+  }
+
+  function pow(){
+    if (!state.op) {
+      state.a = parseDisplay(view.val.textContent);
+      state.op = "^";
+      state.entering = "b";
+      state.overwrite = true;
+      state.exprStr = `${format(state.a)} ^`;
+      view.expr.textContent = state.exprStr;
+    }
+  }
+
+  function negate(){
+    const v = parseDisplay(view.val.textContent);
+    const r = -v;
+    setDisplay(format(r), `±(${format(v)})`);
+  }
+
+  function compute(){
+    const b = parseDisplay(view.val.textContent);
+    if (state.op === "^") {
+      const r = Math.pow(state.a ?? 0, b);
+      pushHistory(`${format(state.a)} ^ ${format(b)}`, format(r));
+      state.a = r; state.op = null; state.entering = "a";
+      setDisplay(format(r), "");
+      state.overwrite = true;
+      return;
+    }
+    if (!state.op) return;
+    try {
+      const r = ops[state.op](state.a ?? 0, b);
+      pushHistory(`${format(state.a)} ${state.op} ${format(b)}`, format(r));
+      state.a = r; state.op = null; state.entering = "a";
+      setDisplay(format(r), "");
+      state.overwrite = true;
+    } catch(e){ err(e.message || "Erreur de calcul."); }
+  }
+
+  function backspace(){
+    if (state.overwrite) return;
+    const cur = view.val.textContent;
+    if (cur.length <= 1 || (cur.length===2 && cur.startsWith("-"))) {
+      setDisplay("0", view.expr.textContent);
+      state.overwrite = true;
+      return;
+    }
+    setDisplay(cur.slice(0,-1), view.expr.textContent);
+  }
+
+  function clearEntry(){ setDisplay("0", view.expr.textContent); state.overwrite = true; }
+  function clearAll(){
+    Object.assign(state, { a:null, b:null, op:null, entering:"a", overwrite:true, exprStr:"" });
+    setDisplay("0",""); 
+  }
+
+  function pushHistory(expr, res){
+    const div = document.createElement("div");
+    div.className = "hitem";
+    const left = document.createElement("div");
+    left.className = "expr"; left.textContent = expr;
+    const right = document.createElement("div");
+    right.className = "res"; right.textContent = res;
+    right.title = "Cliquer pour copier";
+    right.style.cursor = "pointer";
+    right.addEventListener("click", () => {
+      navigator.clipboard?.writeText(res.replace(',', '.'));
+      right.textContent = res + " ✓";
+      setTimeout(()=> right.textContent = res, 600);
+    });
+    div.append(left, right);
+    view.hist.prepend(div);
+  }
+
+  function err(message){
+    const prev = view.val.textContent;
+    pushHistory(view.expr.textContent || "—", "Erreur");
+    setDisplay("Erreur", message);
+    setTimeout(()=> setDisplay(prev, ""), 1000);
+  }
+
+  // Memory
+  function memUpdate(v){ state.memory = v; view.mem.textContent = format(v); }
+  $("#mc").addEventListener("click", ()=> memUpdate(0));
+  $("#mr").addEventListener("click", ()=>{
+    setDisplay(format(state.memory), "MR");
+    state.overwrite = true;
+  });
+  $("#mplus").addEventListener("click", ()=>{
+    const v = parseDisplay(view.val.textContent);
+    memUpdate(state.memory + v);
+  });
+  $("#mminus").addEventListener("click", ()=>{
+    const v = parseDisplay(view.val.textContent);
+    memUpdate(state.memory - v);
+  });
+
+  // Buttons
+  $$("button[data-num]").forEach(b=> b.addEventListener("click", ()=> appendDigit(b.dataset.num)));
+  $$("button[data-dot]").forEach(b=> b.addEventListener("click", addDot));
+  $$("button[data-op]").forEach(b=> b.addEventListener("click", ()=> setOp(b.dataset.op)));
+  $$("button[data-fn]").forEach(b=> b.addEventListener("click", ()=>{
+    const fn = b.dataset.fn;
+    if (fn==="negate") return negate();
+    if (fn==="percent") return percent();
+    if (fn==="sqrt") return sqrt();
+    if (fn==="pow") return pow();
+  }));
+  $("#equals").addEventListener("click", compute);
+  $("#backspace").addEventListener("click", backspace);
+  $("#clearEntry").addEventListener("click", clearEntry);
+  $("#clearAll").addEventListener("click", clearAll);
+  $("#clearHistory").addEventListener("click", ()=> view.hist.innerHTML = "");
+
+  // Precision selector
+  $("#precision").addEventListener("change", ()=>{
+    const v = $("#precision").value;
+    state.stickyPrecision = v !== "auto";
+    if (v !== "auto") state.precision = Number(v);
+    // refresh display with new precision
+    if (view.val.textContent !== "Erreur") {
+      const n = parseDisplay(view.val.textContent);
+      setDisplay(format(n), view.expr.textContent);
+    }
+    view.mem.textContent = format(state.memory);
+  });
+
+  // Keyboard
+  document.addEventListener("keydown", (e)=>{
+    const k = e.key;
+    if (/^\d$/.test(k)) return appendDigit(k);
+    if (k==="."||k==="," ) return addDot();
+    if (k==="+"||k==="-"||k==="*"||k==="/" ) {
+      e.preventDefault();
+      const map = {"+":"+","-":"−","*":"×","/":"÷"};
+      return setOp(map[k]);
+    }
+    if (k==="Enter"||k==="="){ e.preventDefault(); return compute(); }
+    if (k==="Backspace"){ e.preventDefault(); return backspace(); }
+    if (k==="Escape"){ e.preventDefault(); return clearAll(); }
+  });
+
+  // init
+  setDisplay("0","");
+})();
+</script>
+</body>
+</html>
